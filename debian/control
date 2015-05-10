@@ -1,0 +1,17 @@
+Source: golang-etcd-exportedservice
+Section: devel
+Priority: extra
+Maintainer: Caoimhe Chaos <caoimhechaos@protonmail.com>
+Build-Depends: debhelper (>= 9), golang-go, golang-etcd-dev, dh-golang
+Standards-Version: 3.9.4
+Homepage: https://github.com/caoimhechaos/go-etcd-exportedservice
+Vcs-Git: git://anonscm.debian.org/pkg-go/packages/golang-etcd-exportedservice.git
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-go/packages/golang-etcd-exportedservice.git;a=summary
+
+Package: golang-etcd-exportedservice-dev
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends}, golang-doozer-dev
+Description: etcd exported HTTP/TCP/whatever service ports
+ Simple method for programmers to bind their service to anonymous ports
+ and to export the host name and port of the location to a etcd
+ lock service.
