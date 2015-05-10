@@ -1,8 +1,8 @@
-/**
- * Exported named Doozer port.
- * This binds to an anonymous port, exports the host:port pair through Doozer
- * and returns the port to the caller.
- */
+/*
+Exported named etcd port.
+This binds to an anonymous port, exports the host:port pair through etcd
+and returns the port to the caller.
+*/
 package exportedservice
 
 import (
@@ -13,15 +13,15 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 )
 
-// We need to initialize our Doozer client beforehand and keep it somewhere.
+// We need to initialize our etcd client beforehand and keep it somewhere.
 type ServiceExporter struct {
 	conn *etcd.Client
 	path string
 }
 
-/**
- * Try to create a new exporter by connecting to etcd.
- */
+/*
+Try to create a new exporter by connecting to etcd.
+*/
 func NewExporter(servers []string) *ServiceExporter {
 	var self *ServiceExporter = &ServiceExporter{}
 
@@ -30,9 +30,9 @@ func NewExporter(servers []string) *ServiceExporter {
 	return self
 }
 
-/**
- * Try to create a new exporter by connecting to etcd via TLS.
- */
+/*
+Try to create a new exporter by connecting to etcd via TLS.
+*/
 func NewTLSExporter(servers []string, cert, key, ca string) (*ServiceExporter, error) {
 	var self *ServiceExporter = &ServiceExporter{}
 	var err error
@@ -42,10 +42,10 @@ func NewTLSExporter(servers []string, cert, key, ca string) (*ServiceExporter, e
 	return self, err
 }
 
-/**
- * Open a new anonymous port on "ip" and export it through Doozer as
- * "servicename". If "ip" is a host:port pair, the port will be overridden.
- */
+/*
+Open a new anonymous port on "ip" and export it through etcd as
+"servicename". If "ip" is a host:port pair, the port will be overridden.
+*/
 func (self *ServiceExporter) NewExportedPort(
 	network, ip, servicename string) (net.Listener, error) {
 	var path string = fmt.Sprintf("/ns/service/%s", servicename)
@@ -77,11 +77,11 @@ func (self *ServiceExporter) NewExportedPort(
 	return l, nil
 }
 
-/**
- * Open a new anonymous port on "ip" and export it through Doozer as
- * "servicename". Associate the TLS configuration "config". If "ip" is
- * a host:port pair, the port will be overridden.
- */
+/*
+Open a new anonymous port on "ip" and export it through etcd as
+"servicename". Associate the TLS configuration "config". If "ip" is
+a host:port pair, the port will be overridden.
+*/
 func (self *ServiceExporter) NewExportedTLSPort(
 	network, ip, servicename string,
 	config *tls.Config) (net.Listener, error) {
@@ -98,10 +98,10 @@ func (self *ServiceExporter) NewExportedTLSPort(
 	return tls.NewListener(l, config), nil
 }
 
-/**
- * Remove the associated exported port. This will only delete the most
- * recently exported port.
- */
+/*
+Remove the associated exported port. This will only delete the most
+recently exported port.
+*/
 func (self *ServiceExporter) UnexportPort() error {
 	var err error
 

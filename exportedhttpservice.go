@@ -1,7 +1,7 @@
-/**
- * Exported named Doozer HTTP service.
- * Creates an HTTP server and exports it to Doozer.
- */
+/*
+Exported named etcd HTTP service.
+Creates an HTTP server and exports it to etcd.
+*/
 package exportedservice
 
 import (
@@ -9,10 +9,10 @@ import (
 	"net/http"
 )
 
-/**
- * Make the default HTTP server listen on "addr" and export the given
- * "handler". Register as "servicename".
- */
+/*
+Make the default HTTP server listen on "addr" and export the given
+"handler". Register as "servicename".
+*/
 func (self *ServiceExporter) ListenAndServeNamedHTTP(
 	servicename, addr string, handler http.Handler) error {
 	var l net.Listener
