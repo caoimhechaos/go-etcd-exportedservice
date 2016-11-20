@@ -1,25 +1,23 @@
-/*
-Exported named etcd HTTP service.
-Creates an HTTP server and exports it to etcd.
-*/
 package exportedservice
 
 import (
 	"net"
 	"net/http"
+
+	"golang.org/x/net/context"
 )
 
 /*
-Make the default HTTP server listen on "addr" and export the given
-"handler". Register as "servicename".
+ListenAndServeNamedHTTP makes the default HTTP server listen on "addr" and
+exports the given "handler". Registers as "servicename".
 */
-func (self *ServiceExporter) ListenAndServeNamedHTTP(
-	servicename, addr string, handler http.Handler) error {
+func (e *ServiceExporter) ListenAndServeNamedHTTP(
+	ctx context.Context, servicename, addr string, handler http.Handler) error {
 	var l net.Listener
 	var err error
 
 	// We can just create a new port as above...
-	l, err = self.NewExportedPort("tcp", addr, servicename)
+	l, err = e.NewExportedPort(ctx, "tcp", addr, servicename)
 	if err != nil {
 		return err
 	}

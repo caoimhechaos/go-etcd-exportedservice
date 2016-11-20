@@ -1,7 +1,9 @@
 /*
-Exported named etcd port.
+Package exportedservice provides exported named etcd ports.
 This binds to an anonymous port, exports the host:port pair through etcd
 and returns the port to the caller.
+
+There are convenience methods for exporting a TLS port and an HTTP service.
 */
 package exportedservice
 
@@ -10,47 +12,124 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/coreos/go-etcd/etcd"
+	etcd "github.com/coreos/etcd/clientv3"
+	"golang.org/x/net/context"
 )
 
-// We need to initialize our etcd client beforehand and keep it somewhere.
+// ServiceExporter exists because we need to initialize our etcd client
+// beforehand and keep it somewhere.
 type ServiceExporter struct {
-	conn *etcd.Client
-	path string
+	conn               *etcd.Client
+	path               string
+	leaseID            etcd.LeaseID
+	keepaliveResponses <-chan *etcd.LeaseKeepAliveResponse
+}
+
+func consumeKeepaliveResponses(ch <-chan *etcd.LeaseKeepAliveResponse) {
+	for {
+		<-ch
+	}
 }
 
 /*
-Try to create a new exporter by connecting to etcd.
+NewExporter creates a new exporter object which can later be used to create
+exported ports and services. This will create a client connection to etcd.
+If the connection is severed, once the etcd lease is going to expire the
+port will stop being exported.
+The specified ttl (which must be at least 5 (seconds)) determines how frequently
+the lease will be renewed.
 */
-func NewExporter(servers []string) *ServiceExporter {
-	var self *ServiceExporter = &ServiceExporter{}
-
-	self.conn = etcd.NewClient(servers)
-
-	return self
-}
-
-/*
-Try to create a new exporter by connecting to etcd via TLS.
-*/
-func NewTLSExporter(servers []string, cert, key, ca string) (*ServiceExporter, error) {
-	var self *ServiceExporter = &ServiceExporter{}
+func NewExporter(ctx context.Context, etcdURL string, ttl int64) (
+	*ServiceExporter, error) {
+	var self *ServiceExporter
+	var client *etcd.Client
 	var err error
 
-	self.conn, err = etcd.NewTLSClient(servers, cert, key, ca)
+	client, err = etcd.NewFromURL(etcdURL)
+	if err != nil {
+		return nil, err
+	}
 
-	return self, err
+	self = &ServiceExporter{
+		conn: client,
+	}
+
+	return self, self.initLease(ctx, ttl)
 }
 
 /*
-Open a new anonymous port on "ip" and export it through etcd as
-"servicename". If "ip" is a host:port pair, the port will be overridden.
+NewExporterFromConfigFile creates a new exporter by reading etcd flags from the
+specified configuration file. This will create a client connection to etcd.
+If the connection is severed, once the etcd lease is going to expire the
+port will stop being exported.
+The specified ttl (which must be at least 5 (seconds)) determines how frequently
+the lease will be renewed.
 */
-func (self *ServiceExporter) NewExportedPort(
-	network, ip, servicename string) (net.Listener, error) {
-	var path string = fmt.Sprintf("/ns/service/%s", servicename)
+func NewExporterFromConfigFile(
+	ctx context.Context, config string, ttl int64) (*ServiceExporter, error) {
+	var self *ServiceExporter
+	var client *etcd.Client
+	var err error
+
+	client, err = etcd.NewFromConfigFile(config)
+	if err != nil {
+		return nil, err
+	}
+
+	self = &ServiceExporter{
+		conn: client,
+	}
+
+	return self, self.initLease(ctx, ttl)
+}
+
+/*
+NewExporterFromClient creates a new exporter by reading etcd flags from the
+specified configuration file.
+*/
+func NewExporterFromClient(
+	ctx context.Context, client *etcd.Client, ttl int64) (
+	*ServiceExporter, error) {
+	var rv = &ServiceExporter{
+		conn: client,
+	}
+
+	return rv, rv.initLease(ctx, ttl)
+}
+
+/*
+initLease initializes the lease on the etcd service which will be used to export
+ports in the future.
+*/
+func (e *ServiceExporter) initLease(ctx context.Context, ttl int64) error {
+	var lease *etcd.LeaseGrantResponse
+	var err error
+
+	lease, err = e.conn.Grant(ctx, ttl)
+	if err != nil {
+		return err
+	}
+
+	e.keepaliveResponses, err = e.conn.KeepAlive(ctx, lease.ID)
+	if err != nil {
+		return err
+	}
+
+	e.leaseID = lease.ID
+
+	go consumeKeepaliveResponses(e.keepaliveResponses)
+
+	return nil
+}
+
+/*
+NewExportedPort opens a new anonymous port on "ip" and export it through etcd
+as "servicename". If "ip" is a host:port pair, the port will be overridden.
+*/
+func (e *ServiceExporter) NewExportedPort(
+	ctx context.Context, network, ip, service string) (net.Listener, error) {
+	var path string
 	var host, hostport string
-	var resp *etcd.Response
 	var l net.Listener
 	var err error
 
@@ -64,32 +143,34 @@ func (self *ServiceExporter) NewExportedPort(
 		return nil, err
 	}
 
+	// Use the lease ID as part of the path; it would be reasonable to expect
+	// it to be unique.
+	path = fmt.Sprintf("/ns/service/%s/%16x", service, e.leaseID)
+
 	// Now write our host:port pair to etcd. Let etcd choose the file name.
-	resp, err = self.conn.AddChild(path, hostport, 0)
+	_, err = e.conn.Put(ctx, path, hostport, etcd.WithLease(e.leaseID))
 	if err != nil {
 		return nil, err
 	}
 
-	if resp.Node != nil {
-		self.path = resp.Node.Key
-	}
+	e.path = path
 
 	return l, nil
 }
 
 /*
-Open a new anonymous port on "ip" and export it through etcd as
-"servicename". Associate the TLS configuration "config". If "ip" is
-a host:port pair, the port will be overridden.
+NewExportedTLSPort opens a new anonymous port on "ip" and export it through
+etcd as "servicename" (see NewExportedPort). Associates the TLS configuration
+"config". If "ip" is a host:port pair, the port will be overridden.
 */
-func (self *ServiceExporter) NewExportedTLSPort(
-	network, ip, servicename string,
+func (e *ServiceExporter) NewExportedTLSPort(
+	ctx context.Context, network, ip, servicename string,
 	config *tls.Config) (net.Listener, error) {
 	var l net.Listener
 	var err error
 
 	// We can just create a new port as above...
-	l, err = self.NewExportedPort(network, ip, servicename)
+	l, err = e.NewExportedPort(ctx, network, ip, servicename)
 	if err != nil {
 		return nil, err
 	}
@@ -99,17 +180,18 @@ func (self *ServiceExporter) NewExportedTLSPort(
 }
 
 /*
-Remove the associated exported port. This will only delete the most
-recently exported port.
+UnexportPort removes the associated exported port. This will only delete the
+most recently exported port. Exported ports will disappear by themselves once
+the process dies, but this will expedite the process.
 */
-func (self *ServiceExporter) UnexportPort() error {
+func (e *ServiceExporter) UnexportPort(ctx context.Context) error {
 	var err error
 
-	if len(self.path) == 0 {
+	if len(e.path) == 0 {
 		return nil
 	}
 
-	if _, err = self.conn.Delete(self.path, false); err != nil {
+	if _, err = e.conn.Delete(ctx, e.path); err != nil {
 		return err
 	}
 
