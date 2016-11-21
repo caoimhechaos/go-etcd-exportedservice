@@ -136,9 +136,9 @@ func (e *ServiceExporter) NewExportedPort(
 	if host, _, err = net.SplitHostPort(ip); err != nil {
 		// Apparently, it's not in host:port format.
 		host = ip
+		hostport = net.JoinHostPort(host, "0")
 	}
 
-	hostport = net.JoinHostPort(host, "0")
 	if l, err = net.Listen(network, hostport); err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (e *ServiceExporter) NewExportedPort(
 	path = fmt.Sprintf("/ns/service/%s/%16x", service, e.leaseID)
 
 	// Now write our host:port pair to etcd. Let etcd choose the file name.
-	_, err = e.conn.Put(ctx, path, hostport, etcd.WithLease(e.leaseID))
+	_, err = e.conn.Put(ctx, path, l.Addr().String(), etcd.WithLease(e.leaseID))
 	if err != nil {
 		return nil, err
 	}
