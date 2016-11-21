@@ -26,8 +26,7 @@ type ServiceExporter struct {
 }
 
 func consumeKeepaliveResponses(ch <-chan *etcd.LeaseKeepAliveResponse) {
-	for {
-		<-ch
+	for _ = range ch {
 	}
 }
 
@@ -110,7 +109,7 @@ func (e *ServiceExporter) initLease(ctx context.Context, ttl int64) error {
 		return err
 	}
 
-	e.keepaliveResponses, err = e.conn.KeepAlive(ctx, lease.ID)
+	e.keepaliveResponses, err = e.conn.KeepAlive(context.Background(), lease.ID)
 	if err != nil {
 		return err
 	}
