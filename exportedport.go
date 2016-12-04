@@ -123,7 +123,8 @@ func (e *ServiceExporter) initLease(ctx context.Context, ttl int64) error {
 
 /*
 NewExportedPort opens a new anonymous port on "ip" and export it through etcd
-as "servicename". If "ip" is a host:port pair, the port will be overridden.
+as "servicename". If "ip" is not a host:port pair, the port will be chosen at
+random.
 */
 func (e *ServiceExporter) NewExportedPort(
 	ctx context.Context, network, ip, service string) (net.Listener, error) {
@@ -136,6 +137,8 @@ func (e *ServiceExporter) NewExportedPort(
 		// Apparently, it's not in host:port format.
 		host = ip
 		hostport = net.JoinHostPort(host, "0")
+	} else {
+		hostport = ip
 	}
 
 	if l, err = net.Listen(network, hostport); err != nil {
