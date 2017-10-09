@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/caoimhechaos/go-etcd-clientbuilder/autoconf"
 	etcd "github.com/coreos/etcd/clientv3"
 	"golang.org/x/net/context"
 )
@@ -57,20 +58,22 @@ func NewExporter(ctx context.Context, etcdURL string, ttl int64) (
 }
 
 /*
-NewExporterFromConfigFile creates a new exporter by reading etcd flags from the
-specified configuration file. This will create a client connection to etcd.
+NewFromDefault creates a new exporter object which can later be used to create
+exported ports and services. This will create a client connection to etcd using
+the flags based DNS autoconfiguration.
+
 If the connection is severed, once the etcd lease is going to expire the
 port will stop being exported.
+
 The specified ttl (which must be at least 5 (seconds)) determines how frequently
 the lease will be renewed.
 */
-func NewExporterFromConfigFile(
-	ctx context.Context, config string, ttl int64) (*ServiceExporter, error) {
+func NewFromDefault(ctx context.Context, ttl int64) (*ServiceExporter, error) {
 	var self *ServiceExporter
 	var client *etcd.Client
 	var err error
 
-	client, err = etcd.NewFromConfigFile(config)
+	client, err = autoconf.DefaultEtcdClient()
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +136,7 @@ func (e *ServiceExporter) NewExportedPort(
 	var l net.Listener
 	var err error
 
-	if host, _, err = net.SplitHostPort(ip); err != nil {
+	if _, _, err = net.SplitHostPort(ip); err != nil {
 		// Apparently, it's not in host:port format.
 		host = ip
 		hostport = net.JoinHostPort(host, "0")
